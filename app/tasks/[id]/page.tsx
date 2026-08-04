@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 
 export default async function TaskDetailPage({
@@ -28,6 +29,25 @@ export default async function TaskDetailPage({
   const isOverdue =
     task.dueDate < now && task.status !== "COMPLETE";
 
+  async function archiveTask() {
+    "use server";
+
+    await prisma.task.update({
+      where: {
+        id: taskId,
+      },
+      data: {
+        archivedAt: new Date(),
+      },
+    });
+
+    revalidatePath("/tasks");
+    revalidatePath("/archive");
+    revalidatePath(`/tasks/${taskId}`);
+
+    redirect("/tasks");
+  }
+
   return (
     <main className="mx-auto max-w-2xl p-8">
       {isOverdue && (
@@ -39,12 +59,25 @@ export default async function TaskDetailPage({
       <header className="mb-6 flex items-center justify-between border-b pb-4">
         <h1 className="text-3xl font-bold">{task.title}</h1>
 
-        <Link
-          href={`/tasks/${task.id}/edit`}
-          className="rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
-        >
-          Edit Task
-        </Link>
+        {task.archivedAt === null && (
+          <div className="flex gap-3">
+            <Link
+              href={`/tasks/${task.id}/edit`}
+              className="rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
+            >
+              Edit Task
+            </Link>
+
+            <form action={archiveTask}>
+              <button
+                type="submit"
+                className="rounded bg-red-600 px-4 py-2 text-white hover:bg-red-700"
+              >
+                Archive Task
+              </button>
+            </form>
+          </div>
+        )}
       </header>
 
       <section className="space-y-4">
@@ -62,6 +95,12 @@ export default async function TaskDetailPage({
           {task.dueDate.toLocaleDateString()}
         </p>
 
+        {task.archivedAt && (
+          <p className="font-semibold text-gray-600">
+            Archived on {task.archivedAt.toLocaleDateString()}
+          </p>
+        )}
+
         <div>
           <p className="mb-2 font-semibold">Description:</p>
 
@@ -72,8 +111,11 @@ export default async function TaskDetailPage({
       </section>
 
       <div className="mt-8">
-        <Link href="/tasks" className="hover:text-blue-600">
-          ← Back to Tasks
+        <Link
+          href={task.archivedAt ? "/archive" : "/tasks"}
+          className="hover:text-blue-600"
+        >
+          ← Back to {task.archivedAt ? "Archive" : "Tasks"}
         </Link>
       </div>
     </main>
